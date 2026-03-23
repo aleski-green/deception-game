@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import glob as glob_mod
 import os

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import aiosqlite
 from pathlib import Path
 from .schema import AGENT_SCHEMA

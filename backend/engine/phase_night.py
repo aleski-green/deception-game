@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from agents.agent import Agent
 from db.shared_db import SharedDB
 
