@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import asyncio
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from engine.game import GameEngine
@@ -19,7 +22,7 @@ def get_engine() -> GameEngine:
 
 
 class ConfigRequest(BaseModel):
-    api_key: str | None = None
+    api_key: Optional[str] = None
 
 
 @router.post("/config")
