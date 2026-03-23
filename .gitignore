@@ -15,6 +15,7 @@ backend/data/*.sqlite
 
 # Node
 node_modules/
+package-lock.json
 dist/
 .vite/
 
