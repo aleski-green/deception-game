@@ -160,6 +160,11 @@ class GameEngine:
             if self.winner:
                 break
 
+            # Fix #2: Each surviving agent summarizes the round for long-term memory
+            alive_ids_post = [p['id'] for p in alive]
+            for pid in alive_ids_post:
+                await self.agents[pid].summarize_round(self.round_num)
+
         # Game over
         if self.winner:
             await self.shared_db.set_winner(self.game_id, self.winner)

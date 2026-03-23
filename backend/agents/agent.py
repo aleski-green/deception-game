@@ -5,8 +5,10 @@ from db.shared_db import SharedDB
 from agents.llm import chat
 from agents.prompts import (
     build_persona, build_game_state, build_private_knowledge,
-    build_public_history, FREECHAT_TASK, PITCH_TASK, VOTE_TASK,
+    build_public_history_tiered, build_prior_thinking, build_positions,
+    build_diary, FREECHAT_TASK, PITCH_TASK, VOTE_TASK,
     NIGHT_KILL_TASK, NIGHT_INVESTIGATE_TASK, NIGHT_HEAL_TASK, THOUGHT_TASK,
+    REFLECT_TASK, SUMMARIZE_TASK, EXTRACT_POSITIONS_TASK,
 )
 
 
@@ -39,13 +41,28 @@ class Agent:
             private_data['known_facts'], private_data['suspicions'], player_names
         )
 
+        # Fix #4: Chain-of-thought continuity — inject recent thoughts & strategy
+        prior_thinking = build_prior_thinking(private_data.get('thoughts', []))
+
+        # Fix #3: Position tracking — inject established public positions
+        positions = build_positions(private_data.get('positions', []))
+
+        # Fix #1: Narrative memory — inject diary entries
+        diary = build_diary(private_data.get('diary', []))
+
+        # Fix #2: Tiered summarization — full recent history + summaries of older rounds
+        round_summaries = private_data.get('round_summaries', [])
         freechats = await self.shared_db.get_all_freechats(self.game_id)
         pitches = await self.shared_db.get_all_pitches(self.game_id)
         vote_results = await self.shared_db.get_vote_results(self.game_id)
         night_results = await self.shared_db.get_night_results(self.game_id)
-        public_history = build_public_history(freechats, pitches, vote_results, night_results, player_names)
+        public_history = build_public_history_tiered(
+            freechats, pitches, vote_results, night_results,
+            player_names, round_num, round_summaries
+        )
 
-        return f"{persona}\n\n{game_state}\n\n{private_knowledge}\n\n{public_history}"
+        return (f"{persona}\n\n{game_state}\n\n{private_knowledge}\n\n"
+                f"{prior_thinking}\n\n{positions}\n\n{diary}\n\n{public_history}")
 
     def _parse_json(self, text: str) -> dict:
         text = text.strip()
@@ -218,3 +235,33 @@ class Agent:
         await self.agent_db.add_thought(self.game_id, round_num, "night_heal",
                                          f"Healing #{target}: {reasoning}")
         return target
+
+    # --- Fix #1: Narrative memory ---
+    async def reflect(self, round_num: int, phase: str, context: str) -> str:
+        """Generate a subjective diary entry after an interaction."""
+        system = await self._build_system_prompt(round_num, phase)
+        task = REFLECT_TASK.format(context=context)
+        response = await chat(system, [{"role": "user", "content": task}], max_tokens=150)
+        entry = response.strip().strip('"')[:300]
+        await self.agent_db.add_diary(self.game_id, round_num, phase, entry)
+        return entry
+
+    # --- Fix #2: Tiered summarization ---
+    async def summarize_round(self, round_num: int) -> str:
+        """Generate a summary of a completed round for long-term memory."""
+        system = await self._build_system_prompt(round_num, "summary")
+        task = SUMMARIZE_TASK.format(round_num=round_num)
+        response = await chat(system, [{"role": "user", "content": task}], max_tokens=200)
+        summary = response.strip().strip('"')[:400]
+        await self.agent_db.add_round_summary(self.game_id, round_num, summary)
+        return summary
+
+    # --- Fix #3: Position tracking ---
+    async def extract_positions(self, round_num: int, phase: str, what_i_said: str) -> str:
+        """Extract public commitments from what the agent just said."""
+        system = await self._build_system_prompt(round_num, phase)
+        task = EXTRACT_POSITIONS_TASK.format(what_i_said=what_i_said)
+        response = await chat(system, [{"role": "user", "content": task}], max_tokens=150)
+        positions = response.strip().strip('"')[:300]
+        await self.agent_db.add_position(self.game_id, round_num, phase, positions)
+        return positions

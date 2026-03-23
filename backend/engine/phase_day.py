@@ -61,6 +61,13 @@ async def run_freechat(agents: dict[int, Agent], alive_ids: list[int],
             })
             msg_count += 1
 
+        # Fix #1: Both agents reflect on the conversation (narrative memory)
+        conv_summary = " | ".join(f"{m['sender']}: {m['content']}" for m in conversation)
+        await agent_a.reflect(round_num, "freechat",
+                              f"You just had a private conversation with {names[b_id]}: {conv_summary}")
+        await agent_b.reflect(round_num, "freechat",
+                              f"You just had a private conversation with {names[a_id]}: {conv_summary}")
+
 
 async def run_pitches(agents: dict[int, Agent], alive_ids: list[int],
                       shared_db: SharedDB, game_id: int, round_num: int,
@@ -90,6 +97,8 @@ async def run_pitches(agents: dict[int, Agent], alive_ids: list[int],
             "data": {"round": round_num, "speakerId": pid,
                      "speakerName": names[pid], "content": pitch_text}
         })
+        # Fix #3: Extract public positions for self-consistency tracking
+        await agents[pid].extract_positions(round_num, "pitch", pitch_text)
 
 
 async def run_vote(agents: dict[int, Agent], alive_ids: list[int],

@@ -24,7 +24,9 @@ async def get_agent_history(agent_id: int):
     eng = get_engine()
     if agent_id < 0 or agent_id > 4:
         raise HTTPException(400, "Agent ID must be 0-4")
-    return await eng.get_agent_history(agent_id)
+    data = await eng.get_agent_history(agent_id)
+    # data now includes: thoughts, suspicions, known_facts, diary, round_summaries, positions
+    return data
 
 
 @router.get("/freechat/{round_num}")

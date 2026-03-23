@@ -73,9 +73,54 @@ class AgentDB:
         )
         return [dict(r) for r in await cursor.fetchall()]
 
+    # --- Diary (Fix #1) ---
+    async def add_diary(self, game_id: int, round_num: int, phase: str, content: str):
+        await self.db.execute(
+            "INSERT INTO diary (game_id, round, phase, content) VALUES (?, ?, ?, ?)",
+            (game_id, round_num, phase, content),
+        )
+        await self.db.commit()
+
+    async def get_diary(self, game_id: int) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM diary WHERE game_id = ? ORDER BY id", (game_id,)
+        )
+        return [dict(r) for r in await cursor.fetchall()]
+
+    # --- Round summaries (Fix #2) ---
+    async def add_round_summary(self, game_id: int, round_num: int, content: str):
+        await self.db.execute(
+            "INSERT INTO round_summaries (game_id, round, content) VALUES (?, ?, ?)",
+            (game_id, round_num, content),
+        )
+        await self.db.commit()
+
+    async def get_round_summaries(self, game_id: int) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM round_summaries WHERE game_id = ? ORDER BY round", (game_id,)
+        )
+        return [dict(r) for r in await cursor.fetchall()]
+
+    # --- Positions (Fix #3) ---
+    async def add_position(self, game_id: int, round_num: int, phase: str, content: str):
+        await self.db.execute(
+            "INSERT INTO positions (game_id, round, phase, content) VALUES (?, ?, ?, ?)",
+            (game_id, round_num, phase, content),
+        )
+        await self.db.commit()
+
+    async def get_positions(self, game_id: int) -> list[dict]:
+        cursor = await self.db.execute(
+            "SELECT * FROM positions WHERE game_id = ? ORDER BY id", (game_id,)
+        )
+        return [dict(r) for r in await cursor.fetchall()]
+
     async def get_all(self, game_id: int) -> dict:
         return {
             "thoughts": await self.get_thoughts(game_id),
             "suspicions": await self.get_latest_suspicions(game_id),
             "known_facts": await self.get_known_facts(game_id),
+            "diary": await self.get_diary(game_id),
+            "round_summaries": await self.get_round_summaries(game_id),
+            "positions": await self.get_positions(game_id),
         }

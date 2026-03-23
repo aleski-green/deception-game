@@ -82,26 +82,73 @@ def build_private_knowledge(known_facts: list[dict], suspicions: list[dict], pla
     return "\n".join(parts)
 
 
-def build_public_history(freechats: list[dict], pitches: list[dict], vote_results: list[dict],
-                         night_results: list[dict], player_names: dict[int, str]) -> str:
+def build_prior_thinking(thoughts: list[dict]) -> str:
+    """Fix #4: Inject recent thoughts and strategy for chain-of-thought continuity."""
+    if not thoughts:
+        return ""
+    parts = ["YOUR PREVIOUS THINKING (maintain continuity with your reasoning):"]
+    for t in thoughts[-4:]:
+        parts.append(f"  Round {t['round']} ({t['phase']}): {t['content']}")
+    return "\n".join(parts)
+
+
+def build_positions(positions: list[dict]) -> str:
+    """Fix #3: Inject established public positions for self-consistency."""
+    if not positions:
+        return ""
+    parts = ["YOUR ESTABLISHED POSITIONS (what you've publicly committed to):",
+             "CRITICAL: Do not contradict these unless you explicitly acknowledge changing your mind."]
+    for p in positions[-5:]:
+        parts.append(f"  Round {p['round']} ({p['phase']}): {p['content']}")
+    return "\n".join(parts)
+
+
+def build_diary(diary: list[dict]) -> str:
+    """Fix #1: Inject narrative diary entries for subjective memory."""
+    if not diary:
+        return ""
+    parts = ["YOUR INTERNAL DIARY (your subjective impressions):"]
+    for d in diary[-5:]:
+        parts.append(f"  Round {d['round']} ({d['phase']}): {d['content']}")
+    return "\n".join(parts)
+
+
+def build_public_history_tiered(freechats: list[dict], pitches: list[dict],
+                                vote_results: list[dict], night_results: list[dict],
+                                player_names: dict[int, str], current_round: int,
+                                round_summaries: list[dict]) -> str:
+    """Fix #2: Full recent history + LLM-generated summaries for older rounds."""
     parts = ["PUBLIC HISTORY:"]
     if not any([freechats, pitches, vote_results, night_results]):
         parts.append("  No public events yet — this is the start of the game.")
         return "\n".join(parts)
 
-    if freechats:
-        parts.append("Recent conversations:")
-        for msg in freechats[-20:]:
+    # Tier 2: Summaries of older rounds (before current - 1)
+    if round_summaries:
+        parts.append("=== EARLIER ROUNDS (your memory summaries) ===")
+        for s in round_summaries:
+            parts.append(f"  Round {s['round']}: {s['content']}")
+
+    # Tier 1: Full verbatim history for recent rounds (current and previous)
+    recent_cutoff = max(1, current_round - 1)
+    parts.append(f"=== RECENT ROUNDS (full detail, round {recent_cutoff}+) ===")
+
+    recent_freechats = [m for m in freechats if m['round'] >= recent_cutoff]
+    if recent_freechats:
+        parts.append("Conversations:")
+        for msg in recent_freechats:
             sender = player_names.get(msg['sender_id'], '?')
             receiver = player_names.get(msg['receiver_id'], '?')
             parts.append(f"  {sender} → {receiver}: {msg['content']}")
 
-    if pitches:
-        parts.append("Recent pitches:")
-        for p in pitches[-10:]:
+    recent_pitches = [p for p in pitches if p['round'] >= recent_cutoff]
+    if recent_pitches:
+        parts.append("Pitches:")
+        for p in recent_pitches:
             speaker = player_names.get(p['speaker_id'], '?')
-            parts.append(f"  {speaker}: {p['content']}")
+            parts.append(f"  R{p['round']} {speaker}: {p['content']}")
 
+    # Vote and night results — always show all (they're compact)
     if vote_results:
         parts.append("Vote results:")
         for vr in vote_results:
@@ -160,6 +207,25 @@ The player you protect cannot be killed by the impostor tonight.
 
 Respond with ONLY a JSON object (no other text):
 {{"heal_target": <player_id>, "reasoning": "<brief private reasoning>"}}"""
+
+REFLECT_TASK = """Write a brief internal diary entry about what just happened.
+{context}
+How did the interaction feel? What subtle signals did you notice? Any gut feelings?
+Respond with ONLY 1-3 sentences of raw subjective impression — no JSON, no formatting."""
+
+SUMMARIZE_TASK = """Summarize everything important that happened in Round {round_num}.
+Focus on: who said what suspicious, alliances formed/broken, key votes, night outcomes,
+and anything that changed your read on other players.
+Respond with ONLY 3-4 sentences — no JSON, no formatting."""
+
+EXTRACT_POSITIONS_TASK = """You just said this publicly:
+"{what_i_said}"
+
+List the positions you committed to. Briefly note:
+- Who did you accuse or defend?
+- What claims did you make about your role or knowledge?
+- What alliances did you signal?
+Respond with ONLY a brief bullet list (2-4 bullets) — no JSON, no formatting."""
 
 THOUGHT_TASK = """Before taking action, think privately about the current situation.
 Consider:
