@@ -110,7 +110,7 @@ async def run_night(agents: dict[int, Agent], alive_ids: list[int],
         "data": {
             "round": round_num,
             "killedId": killed_id,
-            "killedName": names.get(killed_id, None) if killed_id else None,
+            "killedName": names.get(killed_id, None) if killed_id is not None else None,
             "saved": saved,
         }
     })
